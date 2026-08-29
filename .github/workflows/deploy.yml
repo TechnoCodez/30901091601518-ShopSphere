@@ -1,0 +1,85 @@
+name: Deploy to Production
+
+# GitHub Actions Workflow for ShopSphere
+# Triggered manually via GitHub UI (workflow_dispatch)
+# Vercel auto-deployment handles all automatic deployments on push to main
+#
+# Required GitHub Secrets:
+#  - VERCEL_TOKEN: Authentication token from Vercel account
+#  - VERCEL_ORG_ID: Organization ID from Vercel project settings
+#  - VERCEL_PROJECT_ID: Project ID for backend deployment
+#
+# See ROLLBACK_PLAN.md for failure detection and rollback procedures
+# See EYOUTH-30901091601518-ShopSphere.md for complete project documentation
+
+on:
+  workflow_dispatch:  # Only allow manual trigger via GitHub UI
+  
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
+        
+      - name: Log deployment start
+        run: |
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] Starting production deployment"
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] Git commit: ${{ github.sha }}"
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] Triggered by: ${{ github.actor }}"
+
+      - name: Install Vercel CLI
+        working-directory: ./backend
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel Environment Information
+        working-directory: ./backend
+        run: |
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] Pulling Vercel environment configuration"
+          vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build Project Artifacts
+        working-directory: ./backend
+        run: |
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] Building project artifacts"
+          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] Build completed successfully"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy to Vercel Production
+        working-directory: ./backend
+        run: |
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] Deploying to Vercel production"
+          vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] Deployment completed"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          
+      - name: Log deployment completion
+        if: success()
+        run: |
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] Production deployment successful"
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] All services deployed and verified"
+          
+      - name: Log deployment failure
+        if: failure()
+        run: |
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [ERROR] Production deployment failed"
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] [ERROR] See ROLLBACK_PLAN.md for recovery steps"
